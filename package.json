@@ -1,0 +1,18 @@
+{
+  "name": "arduicast",
+  "version": "0.0.1",
+  "description": "Télécommande Arduino pour lancer R7 sur Chromecast",
+  "main": "bonjour.js",
+  "dependencies": {
+    "castv2": "^0.1.3",
+    "express": "^4.8.6",
+    "mdns-js": "^0.1.0",
+    "socket.io-client": "^1.0.6"
+  },
+  "devDependencies": {},
+  "scripts": {
+    "test": "echo \"Error: no test specified\" && exit 1"
+  },
+  "author": "Ludovic Muncherji",
+  "license": "ISC"
+}
