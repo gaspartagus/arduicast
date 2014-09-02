@@ -9,8 +9,7 @@
 
 #include <Process.h>
 
-Process bonjour;
-Process socket;
+Process server;
 Process p;
 
 int blue_ledPin = 8;
@@ -22,8 +21,8 @@ int exit_btnPin = 3;
 int progP_btnPin = 6;
 int progM_btnPin = 5;
 
+bool serverLaunched = false;
 bool launched = false;
-bool socketConnected = false;
 
 int start = 0;
 int progP = 0;
@@ -31,60 +30,57 @@ int progM = 0;
 int menu = 0;
 int sortie = 0;
 
+String IP_CHROMECAST = "10.0.2.113";
+String script = "node /mnt/sda1/arduino/node/remote.js " + IP_CHROMECAST;
+
 void setup() {
-  pinMode(blue_ledPin, OUTPUT);
-  pinMode(red_ledPin, OUTPUT);
+  //pinMode(blue_ledPin, OUTPUT);
+  //pinMode(red_ledPin, OUTPUT);
   pinMode(start_btnPin, INPUT_PULLUP);
   pinMode(progP_btnPin, INPUT_PULLUP);
   pinMode(progM_btnPin, INPUT_PULLUP);
   pinMode(menu_btnPin, INPUT_PULLUP);
   pinMode(exit_btnPin, INPUT_PULLUP);
+  
+  Bridge.begin();
+  Serial.begin(9600);
 
-  Bridge.begin();	// Initialize the Bridge
-  Serial.begin(9600);	// Initialize the Serial
-
-  // Wait until a Serial Monitor is connected.
-  while (!Serial) {
+  /*while (!Serial) {
     blinkAllLeds();
-  }
-
-  Serial.println("Started process");
+  }*/
+  
+  //Serial.println("Started process");
+  
+  //server.runShellCommandAsynchronously(script);
+  //delay(20000);
+  //requestServer("discover");
+  launchServer();
 }
 
 void loop() {
   start = digitalRead(start_btnPin);
-
+  
   if(start == LOW) {
     if(launched == false) {
-      bonjour.runShellCommandAsynchronously("node /mnt/sda1/arduino/node/bonjour.js");
+      requestServer("cast");
       launched = true;
-      Serial.println("App launched");
-      delay(10000);
-      blinkAllLeds();
+      //Serial.println("App launched");
+      //blinkAllLeds();
     }
     else {
-      sendMessage(123);
+      requestServer("stop");
       launched = false;
-      Serial.println("App closed");
+      //Serial.println("App closed");
     }
   }
-
+  
   if(launched == true) {
-    if(socketConnected == false) {
-      Serial.println("Connecting to socket ...");
-      socket.runShellCommandAsynchronously("node /mnt/sda1/arduino/node/socket.js");
-      socketConnected = true;
-      delay(10000);
-      blinkAllLeds();
-    }
-
+    digitalWrite(blue_ledPin, HIGH);
     menu = digitalRead(menu_btnPin);
     sortie = digitalRead(exit_btnPin);
     progP = digitalRead(progP_btnPin);
     progM = digitalRead(progM_btnPin);
-
-    // pass any bytes that come in from the serial port
-    // to the running node process:
+    
     if (progP == LOW) {
       sendMessage(33);
     }
@@ -98,22 +94,29 @@ void loop() {
       sendMessage(27);
     }
   }
-
-  // pass any incoming bytes from the running node process
-  // to the serial port:
-  while (socket.available()) {
-    Serial.write(socket.read());
-  }
-
-  if(socket.running()) {
+  
+  /*while (server.available()) {
+    Serial.write(server.read());
+  }*/
+  
+  if(server.running()) {
     digitalWrite(red_ledPin, HIGH);
+    serverLaunched = true;
   }
   else {
     digitalWrite(red_ledPin, LOW);
+    serverLaunched = false;
+    launchServer();
   }
 }
 
-void blinkAllLeds() {
+void launchServer() {
+  server.runShellCommandAsynchronously(script);
+  delay(21000);
+  requestServer("discover");
+}
+
+/*void blinkAllLeds() {
   digitalWrite(red_ledPin, HIGH);
   digitalWrite(blue_ledPin, HIGH);
   delay(500);
@@ -129,14 +132,21 @@ void blinkLed(int pin) {
   digitalWrite(red_ledPin, LOW);
   digitalWrite(blue_ledPin, LOW);
   delay(500);
-}
+}*/
 
-void sendMessage(int key) {
-  String request = "http://localhost:8080/key/" + String(key);
-  Serial.println(request);
-  blinkLed(blue_ledPin);
+void requestServer(String command) {
+  String request = "http://localhost:8080/" + command;
+  //Serial.println(request);
+  //blinkLed(blue_ledPin);
   p.begin("curl");
   p.addParameter(request);
   p.runAsynchronously();
-  delay(500);
+}
+
+void sendMessage(int key) {
+  String request = "key/" + String(key);
+  requestServer(request);
+  digitalWrite(blue_ledPin, HIGH);
+  delay(100);
+  digitalWrite(blue_ledPin, LOW);
 }
