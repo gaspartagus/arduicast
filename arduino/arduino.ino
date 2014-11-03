@@ -33,8 +33,8 @@ const int touches[] = {
 
 // Dans la première colonne la valeur du dernier front,
 // dans la deuxième la dernière fois où il a changé
-long fronts[13][2] = { 
-  { 0,0 },  
+long fronts[13][2] = {
+  { 0,0 },
   { 0,0 },
   { 0,0 },
   { 0,0 },
@@ -69,9 +69,14 @@ String ssid = "goran";
 String encryption = "psk";
 String key = "DEADBEEF75";
 
+String mime1 = "";
+String mime2 = "";
+
 int debounce = 50;
 
-String script = "node /mnt/sda1/arduino/node/remote2.js";
+String script = "node /mnt/sda1/arduino/node/remote2.js >> /mnt/sda1/arduino/node/output.txt";
+String config = "/mnt/sda1/arduino/node/echo.sh";
+String tempConfig = "";
 
 // Main loop variables
 int etat = 0;
@@ -98,13 +103,15 @@ void setup() {
   Serial.println("Bridge started");
   // wireless.runShellCommandAsynchronously("sh /mnt/sda1/arduino/node/echo.sh freeboxchh psk newdecfreebox");
   // wireless.runShellCommandAsynchronously("sh /mnt/sda1/arduino/node/echo.sh goran psk DEADBEEF75");
-  
 
-  server.runShellCommandAsynchronously(script);
 
   nfc.begin();
-  
-  // delay(5000);  
+
+  // server.begin("node");
+  // server.addParameter(script);
+  server.runShellCommandAsynchronously(script);
+
+  // delay(5000);
 
 }
 
@@ -141,15 +148,18 @@ void loop() {
     colonne = 0;
   }
 
-  /*output = wireless.read();
-  if(output > -1)
-  {
-    Serial.print(char(output));
-  }*/
+  // if(true){
+  //   int o = wireless.read();
+  //   if(o > -1)
+  //   {
+  //     Serial.print(char(o));
+  //   }
+  // }
+
 
   // Capture NFC tag
-  if(nfcZapToken && nfcWifiToken && etatServeur[0] == 1) {
-    Serial.print(".");
+  if( nfcZapToken && nfcWifiToken ) { // && etatServeur[0] == 1
+    // Serial.print(".");
     if (nfc.tagPresent(50))
     {
       NfcTag tag = nfc.read();
@@ -159,44 +169,70 @@ void loop() {
         NdefMessage message = tag.getNdefMessage();
         NdefRecord record = message.getRecord(0);
         int longueur = record.getPayloadLength();
-        
+
         byte* payload = new byte[longueur];
         record.getPayload(payload);
 
-        // Record the channel
-        if(longueur >= 3 && longueur <= 6){
-          channel = String("");
-          for (int i = 3; i < longueur; ++i)
-          {
-            channel = channel + String(char(payload[i]));
+        int typeLength = record.getTypeLength();
+
+        byte* type = new byte[typeLength];
+        record.getType(type);
+
+        if(longueur >= 0 && typeLength >= 0){
+          int i = 0;
+          mime1 = "";
+          mime2 = "";
+          while(type[i] != 47 && i < typeLength) {
+            mime1 = mime1 + String(char(type[i]));
+            i++;
           }
-          // channel = String(char(payload[3]))+String(char(payload[4]));
-          Serial.println(channel + String("."));
-          nfcZapToken = false;
+          i++;
+          while(i < typeLength) {
+            mime2 = mime2 + String(char(type[i]));
+            i++;
+          }
+          Serial.println(mime1);
+          Serial.println(mime2);
+
+          if(mime2 == "channel") {
+            Serial.println("mime-type : channel.");
+            // Record the channel
+            channel = "";
+            for (int i = 0; i < longueur; ++i)
+            {
+              channel = channel + String(char(payload[i]));
+            }
+            // channel = String(char(payload[3]))+String(char(payload[4]));
+            Serial.println(channel + String("."));
+            nfcZapToken = false;
+          } else if( mime2 == "wifi") {
+            int i = 0;
+            ssid = "";
+            encryption = "";
+            key = "";
+            while(payload[i] != 47 && i < longueur) {
+              ssid = ssid + String(char(payload[i]));
+              i++;
+            }
+            i++;
+            while(payload[i] != 47 && i < longueur) {
+              encryption = encryption + String(char(payload[i]));
+              i++;
+            }
+            i++;
+            while(payload[i] != 47 && i < longueur) {
+              key = key + String(char(payload[i]));
+              i++;
+            }
+            Serial.print(ssid);
+            Serial.print(encryption);
+            Serial.println(key);
+            nfcWifiToken = false;
+          }
         }
 
         // Record the wifi credentials
         if(longueur > 8) {
-          int i = 3;
-          ssid = "";
-          encryption = "";
-          key = "";
-          while(payload[i] != 47 && i < longueur) {
-            ssid = ssid + String(char(payload[i]));
-            i++;
-          }
-          i++;
-          while(payload[i] != 47 && i < longueur) {
-            encryption = encryption + String(char(payload[i]));
-            i++;
-          }
-          i++;
-          while(payload[i] != 47 && i < longueur) {
-            key = key + String(char(payload[i]));
-            i++;
-          }
-          Serial.println(key);
-          nfcWifiToken = false;
         }
 
         // Print the whole payload
@@ -209,7 +245,16 @@ void loop() {
         }
         Serial.println(".");
 
+        Serial.print("TypeLength :");
+        Serial.print(typeLength);
+        Serial.print(", type :");
+        for(int i = 0; i<typeLength; i++){
+          Serial.print(char(type[i]));
+        }
+        Serial.println(".");
+
         delete payload;
+        delete type;
       }
     }
   }
@@ -249,13 +294,15 @@ void loop() {
       }
       if(etatServeur[0] == 1)
         sine(0.5);
-      if( etatServeur[0] == 1 &&
+      if( // etatServeur[0] == 1 &&
           fronts[start_btnPin][0] == -1 &&
           fronts[start_btnPin][1] > graphNow) {
         goTo(1,true);
       } else if( etatServeur[0] == 1 &&
           nfcZapToken == false) {
         goTo(12,true);
+      } else if( nfcWifiToken == false) {
+        goTo(21,true);
       }
     break;
     case 1:
@@ -291,6 +338,24 @@ void loop() {
         nfcZapToken = true;
         goTo(2,true);
       }
+    break;
+    case 21:
+      server.close();
+      digitalWrite(blue_ledPin,HIGH);
+      wireless.begin("sh");
+      wireless.addParameter("/mnt/sda1/arduino/node/echo.sh");
+      wireless.addParameter(ssid);
+      wireless.addParameter(encryption);
+      wireless.addParameter(key);
+      wireless.run();
+      wireless.close();
+      digitalWrite(blue_ledPin,LOW);
+      nfcWifiToken = true;
+      goTo(22,true);
+    break;
+    case 22:
+      server.runShellCommandAsynchronously(script);
+      goTo(0,true);
     break;
     case 2:
       for(int i = 3; i <= 12; i++) {
@@ -380,62 +445,6 @@ void blink(){
   commandNow = millis();
   commandLed = true;
 }
-
-
-// void writeWifiConfig(String ssid, String encryption, String key) {
-//   String debut1 = String("config woption type 'mac80211'\n"
-//         "\toption hwmode '11ng'\n");
-
-//   String debut2 = String("\toption path 'platform/ar933x_wmac'\n"
-//   "\toption htmode 'HT20'\n");
-
-//   String debut3 = String("\tlist ht_capab 'SHORT-GI-20'\n"
-//   "\tlist ht_capab 'SHORT-GI-40'\n");
-
-//   String debut4 = String("\tlist ht_capab 'RX-STBC1'\n"
-//   "\tlist ht_capab 'DSSS_CCK-40'\n");
-
-//   String debut5 = String("\toption disabled '0'\n"
-//   "\toption channel 'auto'\n");
-
-//   String debut6 = String("\toption country 'FR'\n\n"
-//   "config wifi-iface\n");
-
-//   String debut7 = String("\toption device 'radio0'\n"
-//   "\toption network 'lan'\n");
-
-//   String debut8 = String("\toption mode 'sta'\n"
-//   "\toption ssid '");
-  
-//   String milieu1 = String("'\n"
-//   "\toption encryption '");
-  
-//   String milieu2 = String("'\n"
-//   "\toption key '");
-  
-//   String fin = String("'\n\n");
-
-//   Serial.print(debut1);
-//   Serial.print(debut2);
-//   Serial.print(debut3);
-//   // wireless.runShellCommandAsynchronously("sh /mnt/sda1/arduino/node/echo.sh bla blabla blablabla");
-//   /* wireless.runShellCommand("touch /mnt/sda1/arduino/node/wireless");
-//   wireless.runShellCommand(String('echo -e "') + debut1 + String('" >> /mnt/sda1/arduino/node/wireless'));
-//   wireless.runShellCommand(String('cat /mnt/sda1/arduino/node/wireless'));
-
-//   */
-// }
-
-
-
-
-
-
-
-
-
-
-
 
 
 
